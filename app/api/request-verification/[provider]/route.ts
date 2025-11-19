@@ -6,12 +6,12 @@ export async function GET(
   { params }: { params: { provider: string } }
 ) {
   const { provider } = params;
-  
+
   let providerId: string;
-  
+
   // Map provider names to their providerIds
   if (provider === 'binance') {
-    providerId = '285a345c-c6a6-4b9f-9e1e-23432082c0a8';
+    providerId = '2b22db5c-78d9-4d82-84f0-a9e0a4ed0470';
   } else if (provider === 'coinbase') {
     providerId = '285a345c-c6a6-4b9f-9e1e-23432082c0a8';
   } else if (provider === 'x' || provider === 'twitter') {

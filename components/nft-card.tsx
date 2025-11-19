@@ -2,10 +2,11 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { motion } from "framer-motion";
-import { CheckCircle2, Building2 } from "lucide-react";
+import { CheckCircle2, Building2, ExternalLink } from "lucide-react";
 import { SiCoinbase, SiBinance, SiX } from "react-icons/si";
 import { HiOutlineSparkles } from "react-icons/hi";
 import { ComponentType } from "react";
+import { NFT_CONTRACT_ADDRESS } from "@/lib/contracts";
 
 interface NFTCardProps {
   name: string;
@@ -89,8 +90,18 @@ export function NFTCard({
                   <span>Verification Method: {verificationMethod}</span>
                 </div>
                 {tokenId && (
-                  <div className="text-xs text-gray-500 font-mono bg-white/50 p-2 rounded">
-                    Token ID: {tokenId}
+                  <div className="text-xs text-gray-500 font-mono bg-white/50 p-2 rounded flex items-center justify-between gap-2">
+                    <span>Token ID: {tokenId}</span>
+                    <a
+                      href={`https://devnet-explorer.rayls.com/token/${NFT_CONTRACT_ADDRESS}/instance/${tokenId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="text-xs">View on Explorer</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
                   </div>
                 )}
                 <div className="pt-4 border-t border-blue-200">
