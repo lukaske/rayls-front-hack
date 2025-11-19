@@ -11,7 +11,7 @@ import { Address } from "viem";
 import { NFT_CONTRACT_ADDRESS, NFT_ABI } from "@/lib/contracts";
 import { NFTCard } from "@/components/nft-card";
 
-type DocumentType = "id" | "passport";
+type DocumentType = "passport";
 
 interface Provider {
   id: string;
@@ -25,14 +25,14 @@ interface Provider {
 }
 
 const FIXED_INFO = {
-  firstName: "Freya",
-  lastName: "Krause",
-  dob: "1982-03-24",
-  country: "DEU",
-  placeOfBirth: "Berlin",
-  nationality: "DEU",
-  gender: "F",
-  residenceCity: "Stadt Köln",
+  firstName: "David",
+  lastName: "Benedict",
+  dob: "1987-08-11",
+  issuedDate: "2006-09-17",
+  validUntil: "2016-06-17",
+  number: "GBR8412036M1806287",
+  placeOfBirth: "LONDON",
+  country: "GBR"
 };
 
 const PROVIDERS: Provider[] = [
@@ -42,7 +42,7 @@ const PROVIDERS: Provider[] = [
     legalEntity: "Deutsche Bank AG",
     description: "Rayls-local sandbox for German Tier 2 approvals.",
     icon: Landmark,
-    sandboxEndpoint: "http://localhost:3000/api/tier2/providers/deutsche-bank",
+    sandboxEndpoint: "http://localhost:5000/api/applicants",
     accent: "from-sky-500 to-blue-600",
     status: "Live",
   },
@@ -52,7 +52,7 @@ const PROVIDERS: Provider[] = [
     legalEntity: "J.P. Morgan Chase & Co.",
     description: "Institutional onboarding for USD liquidity programs.",
     icon: Building2,
-    sandboxEndpoint: "https://sandbox.rayls.network/tier2/jpm",
+    sandboxEndpoint: "http://localhost:5000/api/jpm/applicants",
     accent: "from-indigo-500 to-violet-600",
     status: "Pilot",
   },
@@ -62,25 +62,27 @@ const PROVIDERS: Provider[] = [
     legalEntity: "DBS Group Holdings",
     description: "APAC treasury partner with MAS-aligned checks.",
     icon: Building,
-    sandboxEndpoint: "https://sandbox.rayls.network/tier2/dbs",
+    sandboxEndpoint: "http://localhost:5000/api/dbs/applicants",
     accent: "from-emerald-500 to-teal-600",
     status: "Requested",
   },
 ];
 
+// Only passport label remains
 const DOC_LABELS: Record<DocumentType, string> = {
-  id: "National ID (PDF)",
-  passport: "Passport (PDF)",
+  passport: "Passport",
 };
 
 export default function Tier2DashboardPage() {
   const { primaryWallet, user } = useDynamicContext();
   const walletConnected = Boolean(primaryWallet || user);
   const { address } = useAccount();
+
+  // Only track passport now
   const [documents, setDocuments] = useState<Record<DocumentType, File | null>>({
-    id: null,
     passport: null,
   });
+
   const [documentStatus, setDocumentStatus] = useState<string | null>(null);
   const [selectedProviderId, setSelectedProviderId] = useState(PROVIDERS[0].id);
   const [requestNote, setRequestNote] = useState("");
@@ -134,7 +136,7 @@ export default function Tier2DashboardPage() {
     args: tokenId ? [tokenId] : undefined,
     query: { enabled: !!address && !!walletConnected && !!tokenId && tokenId !== null && Number(tokenId) > 0 },
   });
-  
+
   const kycData = kycDataRaw as KYCData | undefined;
 
   // Fetch Tier 2 NFTs when balance changes
@@ -143,23 +145,23 @@ export default function Tier2DashboardPage() {
       // Determine if this is a Tier 2 NFT based on platform from KYC data
       setTier2NFTs((prev) => {
         const newMap = new Map(prev);
-        
+
         // If we have KYC data, check if it's a Tier 2 platform
         if (kycData && typeof kycData === 'object' && 'platform' in kycData && kycData.platform) {
           const platform = String(kycData.platform).toLowerCase();
-          
+
           // Check if platform matches any Tier 2 provider
-          const tier2Provider = PROVIDERS.find(p => 
-            p.id.toLowerCase() === platform || 
+          const tier2Provider = PROVIDERS.find(p =>
+            p.id.toLowerCase() === platform ||
             platform.includes(p.id.toLowerCase()) ||
             platform.includes(p.name.toLowerCase())
           );
-          
+
           if (tier2Provider && !newMap.has(tier2Provider.id)) {
             newMap.set(tier2Provider.id, tokenId.toString());
           }
         }
-        
+
         return newMap;
       });
     }
@@ -266,11 +268,45 @@ export default function Tier2DashboardPage() {
     try {
       const requestBody = {
         to: address,
-        firstName: "Freya",
-        lastName: "Krause",
+        firstName: FIXED_INFO.firstName,
+        lastName: FIXED_INFO.lastName,
         kycStatus: "verified",
         platform: selectedProviderId,
       };
+
+      // Submit passport file and fixed info to selected provider's sandboxEndpoint
+      const formData = new FormData();
+      formData.append("firstName", FIXED_INFO.firstName);
+      formData.append("lastName", FIXED_INFO.lastName);
+      formData.append("dob", FIXED_INFO.dob);
+      formData.append("issuedDate", FIXED_INFO.issuedDate);
+      formData.append("validUntil", FIXED_INFO.validUntil);
+      formData.append("number", FIXED_INFO.number);
+      formData.append("placeOfBirth", FIXED_INFO.placeOfBirth);
+      formData.append("country", FIXED_INFO.country);
+      if (documents.passport) {
+        formData.append("passport", documents.passport);
+      }
+
+      // Optionally include note and selfie
+      if (requestNote) formData.append("note", requestNote);
+      if (selfieDataUrl) {
+        // Convert the dataURL to a Blob
+        const response = await fetch(selfieDataUrl);
+        const blob = await response.blob();
+        formData.append("selfie", blob, "selfie.png");
+      }
+
+      const sandboxUrl = selectedProvider.sandboxEndpoint;
+      const sandboxResp = await fetch(sandboxUrl, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!sandboxResp.ok) {
+        let errorText = await sandboxResp.text();
+        throw new Error(`Sandbox endpoint error: ${errorText}`);
+      }
 
       console.log("Sending NFT mint request:", {
         url: "http://localhost:5000/api/nft/mint",
@@ -334,7 +370,7 @@ export default function Tier2DashboardPage() {
 
       const responseText = await response.text();
       console.log("Response body:", responseText);
-      
+
       let result;
       try {
         result = JSON.parse(responseText);
@@ -342,7 +378,7 @@ export default function Tier2DashboardPage() {
         console.warn("Response is not JSON, treating as text:", responseText);
         result = { message: responseText, transactionHash: null, tokenId: null };
       }
-      
+
       // Add the newly minted NFT to the tier2NFTs state
       if (result.success && result.tokenId) {
         setTier2NFTs((prev) => {
@@ -351,7 +387,7 @@ export default function Tier2DashboardPage() {
           return newMap;
         });
       }
-      
+
       setRequestStatus("sent");
       setRequestMessage(
         `Tier 2 request securely delivered to ${selectedProvider.name}. NFT minted successfully!${result.transactionHash ? ` Transaction: ${result.transactionHash.slice(0, 10)}...${result.transactionHash.slice(-8)}` : ""}`
@@ -359,16 +395,16 @@ export default function Tier2DashboardPage() {
     } catch (error: any) {
       console.error("Error minting NFT:", error);
       setRequestStatus("idle");
-      
+
       // Provide user-friendly error messages
       let errorMessage = error.message || "Unknown error occurred";
-      
+
       if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError") || errorMessage.includes("Unable to connect")) {
         errorMessage = "Unable to connect to the NFT minting service. Please ensure the backend server is running on localhost:5000 and CORS is properly configured.";
       } else if (errorMessage.includes("CORS")) {
         errorMessage = "CORS error: The backend server needs to allow requests from this origin.";
       }
-      
+
       setRequestMessage(
         `Failed to mint NFT: ${errorMessage} Please try again or contact support if the issue persists.`
       );
@@ -440,8 +476,7 @@ export default function Tier2DashboardPage() {
           <Card className="bg-white/90 border-white/30 shadow-2xl shadow-cyan-500/20">
             <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <CardTitle>Fixed applicant profile</CardTitle>
-                <CardDescription>Pre-filled data shared with every Tier 2 tenant.</CardDescription>
+                <CardTitle>Applicant profile</CardTitle>
               </div>
               <Button variant="outline" size="sm" className="mt-2 sm:mt-0">
                 Edit
@@ -461,13 +496,13 @@ export default function Tier2DashboardPage() {
         <section className="grid gap-8 lg:grid-cols-2">
           <Card className="border border-cyan-100/60 bg-white/95 shadow-xl shadow-slate-900/10">
             <CardHeader>
-              <CardTitle>Upload government documents</CardTitle>
+              <CardTitle>Upload government document</CardTitle>
               <CardDescription>
-                PDFs are encrypted client-side and stored inside Rayls secure custody.
+                PDF is encrypted client-side and stored inside Rayls secure custody.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {(["id", "passport"] as DocumentType[]).map((type) => (
+              {(["passport"] as DocumentType[]).map((type) => (
                 <label
                   key={type}
                   className="flex flex-col gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-4 cursor-pointer hover:border-cyan-300 hover:bg-white transition"
@@ -475,7 +510,7 @@ export default function Tier2DashboardPage() {
                   <span className="text-sm font-medium text-slate-700">{DOC_LABELS[type]}</span>
                   <input
                     type="file"
-                    accept="application/pdf"
+                    accept="application/pdf,image/png,image/jpeg,image/jpg"
                     className="text-xs text-slate-500"
                     onChange={(event) => handleDocumentUpload(type, event.target.files)}
                   />
@@ -590,8 +625,7 @@ export default function Tier2DashboardPage() {
                   ))}
                 </select>
                 <p className="text-xs text-slate-500">
-                  Requests are delivered to {selectedProvider.legalEntity}. Sandbox endpoint:{" "}
-                  <span className="font-medium text-slate-700">{selectedProvider.sandboxEndpoint}</span>
+                  Requests are delivered to {selectedProvider.legalEntity}.
                 </p>
               </div>
               <div className="space-y-2">
