@@ -5,6 +5,7 @@ import { Navbar } from "@/components/navbar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ShieldCheck, Landmark, Building2, Building, FileCheck2, Camera, Lock, CheckCircle2 } from "lucide-react";
+import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
 
 type DocumentType = "id" | "passport";
 
@@ -69,6 +70,8 @@ const DOC_LABELS: Record<DocumentType, string> = {
 };
 
 export default function Tier2DashboardPage() {
+  const { primaryWallet, user } = useDynamicContext();
+  const walletConnected = Boolean(primaryWallet || user);
   const [documents, setDocuments] = useState<Record<DocumentType, File | null>>({
     id: null,
     passport: null,
@@ -155,7 +158,7 @@ export default function Tier2DashboardPage() {
     if (countdownRef.current) return;
     setSelfieDataUrl(null);
     await startCamera();
-    setCountdown(5);
+    setCountdown(4);
     countdownRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (!prev || prev <= 1) {
@@ -215,6 +218,26 @@ export default function Tier2DashboardPage() {
     };
   }, []);
 
+  if (!walletConnected) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(88,176,255,0.25),_transparent_60%)]" />
+        <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_center,_rgba(12,255,205,0.2),_transparent_65%)] blur-3xl" />
+        <Navbar />
+        <div className="container mx-auto px-4 py-20 text-center relative z-10">
+          <Card className="max-w-md mx-auto bg-white/95 border-white/30 shadow-2xl shadow-cyan-500/20">
+            <CardHeader className="space-y-3">
+              <CardTitle>Please connect your wallet</CardTitle>
+              <CardDescription>
+                Connect a wallet to unlock the Tier 2 dashboard and start your institutional KYC flow.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(88,176,255,0.25),_transparent_55%)]" />
@@ -252,9 +275,14 @@ export default function Tier2DashboardPage() {
             </div>
           </div>
           <Card className="bg-white/90 border-white/30 shadow-2xl shadow-cyan-500/20">
-            <CardHeader>
-              <CardTitle>Fixed applicant profile</CardTitle>
-              <CardDescription>Pre-filled data shared with every Tier 2 tenant.</CardDescription>
+            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle>Fixed applicant profile</CardTitle>
+                <CardDescription>Pre-filled data shared with every Tier 2 tenant.</CardDescription>
+              </div>
+              <Button variant="outline" size="sm" className="mt-2 sm:mt-0">
+                Edit
+              </Button>
             </CardHeader>
             <CardContent className="space-y-4 text-sm text-slate-700">
               {(Object.entries(FIXED_INFO) as [keyof typeof FIXED_INFO, string][]).map(([key, value]) => (
@@ -348,7 +376,7 @@ export default function Tier2DashboardPage() {
                 )}
               </div>
               <div className="flex flex-wrap gap-3">
-                <Button type="button" onClick={startLivelinessSequence} variant="secondary" disabled={!!countdownRef.current}>
+                <Button type="button" onClick={startLivelinessSequence} variant="default" disabled={!!countdownRef.current}>
                   Start liveliness check
                 </Button>
                 <Button
