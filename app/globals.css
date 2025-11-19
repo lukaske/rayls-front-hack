@@ -58,6 +58,10 @@
     @apply bg-background text-foreground;
     font-family: var(--font-roboto), system-ui, sans-serif;
   }
+
+  .font-brand {
+    font-family: var(--font-space-grotesk), var(--font-roboto), system-ui, sans-serif;
+  }
 }
 
 @layer utilities {
