@@ -6,6 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { ShieldCheck, Landmark, Building2, Building, FileCheck2, Camera, Lock, CheckCircle2 } from "lucide-react";
 import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
+import { useAccount, useReadContract } from "wagmi";
+import { Address } from "viem";
+import { NFT_CONTRACT_ADDRESS, NFT_ABI } from "@/lib/contracts";
+import { NFTCard } from "@/components/nft-card";
 
 type DocumentType = "id" | "passport";
 
@@ -72,6 +76,7 @@ const DOC_LABELS: Record<DocumentType, string> = {
 export default function Tier2DashboardPage() {
   const { primaryWallet, user } = useDynamicContext();
   const walletConnected = Boolean(primaryWallet || user);
+  const { address } = useAccount();
   const [documents, setDocuments] = useState<Record<DocumentType, File | null>>({
     id: null,
     passport: null,
@@ -84,6 +89,7 @@ export default function Tier2DashboardPage() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [selfieDataUrl, setSelfieDataUrl] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [tier2NFTs, setTier2NFTs] = useState<Map<string, string>>(new Map());
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
@@ -92,6 +98,72 @@ export default function Tier2DashboardPage() {
     () => PROVIDERS.find((provider) => provider.id === selectedProviderId) ?? PROVIDERS[0],
     [selectedProviderId]
   );
+
+  // Check if user has KYC NFT
+  const { data: hasKYCNFT } = useReadContract({
+    address: NFT_CONTRACT_ADDRESS,
+    abi: NFT_ABI,
+    functionName: "hasKYCNFT",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address && walletConnected },
+  });
+
+  // Get token ID by address if user has NFT
+  const { data: tokenId } = useReadContract({
+    address: NFT_CONTRACT_ADDRESS,
+    abi: NFT_ABI,
+    functionName: "getTokenIdByAddress",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address && walletConnected && hasKYCNFT === true },
+  });
+
+  // Get KYC data for the token to determine platform
+  interface KYCData {
+    firstName: string;
+    lastName: string;
+    kycStatus: string;
+    platform: string;
+    verifiedAddress: Address;
+    mintedAt: bigint;
+  }
+
+  const { data: kycDataRaw } = useReadContract({
+    address: NFT_CONTRACT_ADDRESS,
+    abi: NFT_ABI,
+    functionName: "getKYCData",
+    args: tokenId ? [tokenId] : undefined,
+    query: { enabled: !!address && !!walletConnected && !!tokenId && tokenId !== null && Number(tokenId) > 0 },
+  });
+  
+  const kycData = kycDataRaw as KYCData | undefined;
+
+  // Fetch Tier 2 NFTs when balance changes
+  useEffect(() => {
+    if (address && hasKYCNFT && tokenId !== null && tokenId !== undefined && Number(tokenId) > 0) {
+      // Determine if this is a Tier 2 NFT based on platform from KYC data
+      setTier2NFTs((prev) => {
+        const newMap = new Map(prev);
+        
+        // If we have KYC data, check if it's a Tier 2 platform
+        if (kycData && typeof kycData === 'object' && 'platform' in kycData && kycData.platform) {
+          const platform = String(kycData.platform).toLowerCase();
+          
+          // Check if platform matches any Tier 2 provider
+          const tier2Provider = PROVIDERS.find(p => 
+            p.id.toLowerCase() === platform || 
+            platform.includes(p.id.toLowerCase()) ||
+            platform.includes(p.name.toLowerCase())
+          );
+          
+          if (tier2Provider && !newMap.has(tier2Provider.id)) {
+            newMap.set(tier2Provider.id, tokenId.toString());
+          }
+        }
+        
+        return newMap;
+      });
+    }
+  }, [address, hasKYCNFT, tokenId, kycData]);
 
   const allDocumentsProvided = useMemo(
     () => Object.values(documents).every((file) => !!file),
@@ -175,26 +247,6 @@ export default function Tier2DashboardPage() {
   };
 
   const handleRequestSubmission = async () => {
-  const startLivelinessSequence = async () => {
-    if (countdownRef.current) return;
-    setSelfieDataUrl(null);
-    await startCamera();
-    setCountdown(3);
-    countdownRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (!prev || prev <= 1) {
-          if (countdownRef.current) {
-            clearInterval(countdownRef.current);
-            countdownRef.current = null;
-          }
-          captureSelfie();
-          return null;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
     if (!allDocumentsProvided) {
       setRequestMessage("Please upload both required PDFs before sending the request.");
       return;
@@ -203,13 +255,124 @@ export default function Tier2DashboardPage() {
       setRequestMessage("Complete the liveliness selfie capture to continue.");
       return;
     }
+    if (!address) {
+      setRequestMessage("Please ensure your wallet is connected.");
+      return;
+    }
+
     setRequestStatus("submitting");
     setRequestMessage(null);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setRequestStatus("sent");
-    setRequestMessage(
-      `Tier 2 request securely delivered to ${selectedProvider.name}. They will mint an institutional NFT after their review.`
-    );
+
+    try {
+      const requestBody = {
+        to: address,
+        firstName: "Freya",
+        lastName: "Krause",
+        kycStatus: "verified",
+        platform: selectedProviderId,
+      };
+
+      console.log("Sending NFT mint request:", {
+        url: "http://localhost:5000/api/nft/mint",
+        body: requestBody,
+      });
+
+      // Call the NFT minting API
+      const response = await fetch("http://localhost:5000/api/nft/mint", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      }).catch((fetchError) => {
+        // Handle network errors (CORS, connection refused, etc.)
+        console.error("Fetch error details:", {
+          error: fetchError,
+          message: fetchError.message,
+          stack: fetchError.stack,
+        });
+        if (fetchError.message.includes("Failed to fetch") || fetchError.message.includes("NetworkError")) {
+          throw new Error(
+            "Unable to connect to the NFT minting service. Please ensure the backend server is running on localhost:5000 and CORS is properly configured."
+          );
+        }
+        throw fetchError;
+      });
+
+      console.log("Response received:", {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries()),
+      });
+
+      if (!response.ok) {
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        let errorData = null;
+        try {
+          const text = await response.text();
+          console.error("Error response body:", text);
+          try {
+            errorData = JSON.parse(text);
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } catch {
+            // If not JSON, use the text as error message
+            errorMessage = text || response.statusText || errorMessage;
+          }
+        } catch (parseError) {
+          // If response is not JSON, use status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        console.error("Request failed:", {
+          status: response.status,
+          statusText: response.statusText,
+          errorMessage,
+          errorData,
+        });
+        throw new Error(errorMessage);
+      }
+
+      const responseText = await response.text();
+      console.log("Response body:", responseText);
+      
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.warn("Response is not JSON, treating as text:", responseText);
+        result = { message: responseText, transactionHash: null, tokenId: null };
+      }
+      
+      // Add the newly minted NFT to the tier2NFTs state
+      if (result.success && result.tokenId) {
+        setTier2NFTs((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(selectedProviderId, result.tokenId.toString());
+          return newMap;
+        });
+      }
+      
+      setRequestStatus("sent");
+      setRequestMessage(
+        `Tier 2 request securely delivered to ${selectedProvider.name}. NFT minted successfully!${result.transactionHash ? ` Transaction: ${result.transactionHash.slice(0, 10)}...${result.transactionHash.slice(-8)}` : ""}`
+      );
+    } catch (error: any) {
+      console.error("Error minting NFT:", error);
+      setRequestStatus("idle");
+      
+      // Provide user-friendly error messages
+      let errorMessage = error.message || "Unknown error occurred";
+      
+      if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError") || errorMessage.includes("Unable to connect")) {
+        errorMessage = "Unable to connect to the NFT minting service. Please ensure the backend server is running on localhost:5000 and CORS is properly configured.";
+      } else if (errorMessage.includes("CORS")) {
+        errorMessage = "CORS error: The backend server needs to allow requests from this origin.";
+      }
+      
+      setRequestMessage(
+        `Failed to mint NFT: ${errorMessage} Please try again or contact support if the issue persists.`
+      );
+    }
   };
 
   useEffect(() => {
@@ -465,10 +628,21 @@ export default function Tier2DashboardPage() {
                   className={`rounded-2xl border px-4 py-3 text-sm ${
                     requestStatus === "sent"
                       ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                      : "border-amber-200 bg-amber-50 text-amber-800"
+                      : "border-red-200 bg-red-50 text-red-800"
                   }`}
                 >
-                  {requestMessage}
+                  <div className="whitespace-pre-wrap">{requestMessage}</div>
+                  {requestStatus !== "sent" && requestMessage.includes("Unable to connect") && (
+                    <div className="mt-3 pt-3 border-t border-red-200 text-xs text-red-700">
+                      <p className="font-medium mb-2">Troubleshooting steps:</p>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>Ensure the backend server is running on port 5000</li>
+                        <li>Check that CORS is enabled for your frontend origin</li>
+                        <li>Verify the API endpoint is correct: /api/nft/mint</li>
+                        <li>Check browser console for detailed error messages</li>
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -508,6 +682,50 @@ export default function Tier2DashboardPage() {
             </CardContent>
           </Card>
         </section>
+
+        {tier2NFTs.size === 0 && (
+          <Card className="border-dashed border-2 border-cyan-200 bg-cyan-50/50">
+            <CardHeader>
+              <CardTitle>No Tier 2 credentials yet</CardTitle>
+              <CardDescription>
+                Complete a Tier 2 request above to receive your institutional NFT from the selected tenant.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )}
+
+        {tier2NFTs.size > 0 && (
+          <section className="space-y-4" id="tier2-credentials">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-cyan-200">
+                Institutional credentials
+              </p>
+              <h2 className="text-2xl font-semibold text-white mt-2">
+                Your Tier 2 KYC NFTs
+              </h2>
+              <p className="text-slate-200">
+                Proof of institutional verification secured on-chain. Reuse across the entire Rayls ecosystem.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array.from(tier2NFTs.entries()).map(([providerId, tokenId]) => {
+                const provider = PROVIDERS.find((p) => p.id === providerId);
+                if (!provider) return null;
+
+                return (
+                  <NFTCard
+                    key={providerId}
+                    name={`${provider.name} Tier 2 Verified`}
+                    issuer={provider.legalEntity}
+                    verified={true}
+                    verificationMethod={provider.id}
+                    tokenId={tokenId}
+                  />
+                );
+              })}
+            </div>
+          </section>
+        )}
       </main>
     </div>
   );
