@@ -14,7 +14,7 @@ import Link from "next/link";
 
 export default function DemoPage() {
   const { primaryWallet, user } = useDynamicContext();
-  const walletConnected = (primaryWallet !== null || user)
+  const walletConnected = Boolean(primaryWallet || user)
   const { address } = useAccount();
   const chainId = useChainId();
   const { switchChain, isPending: isSwitchingChain } = useSwitchChain();
@@ -218,7 +218,7 @@ export default function DemoPage() {
               )}
             </div>
             
-            {userDeposit !== undefined && Number(userDeposit) > 0 && (
+            {userDeposit !== undefined && userDeposit !== null && typeof userDeposit === 'bigint' && Number(userDeposit) > 0 && (
               <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
                 <div className="flex items-center gap-2">
                   <Wallet className="w-5 h-5 text-blue-600" />
@@ -284,7 +284,7 @@ export default function DemoPage() {
                 </p>
                 {chainId !== raylsDevnet.id && !isSwitchingChain && (
                   <p className="text-sm mt-1 text-amber-700">
-                    ⚠️ Please ensure you're on Rayls Devnet network (Chain ID: {raylsDevnet.id})
+                    ⚠️ Please ensure you&apos;re on Rayls Devnet network (Chain ID: {raylsDevnet.id})
                   </p>
                 )}
               </div>

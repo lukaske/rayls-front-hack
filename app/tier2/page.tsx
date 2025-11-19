@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { Navbar } from "@/components/navbar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -570,7 +571,7 @@ export default function Tier2DashboardPage() {
                   </>
                 )}
                 {selfieDataUrl && (
-                  <img src={selfieDataUrl} alt="Captured selfie" className="w-full h-64 object-cover" />
+                  <Image src={selfieDataUrl} alt="Captured selfie" width={640} height={256} className="w-full h-64 object-cover" unoptimized />
                 )}
               </div>
               <div className="flex flex-wrap gap-3">

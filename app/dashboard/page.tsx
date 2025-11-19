@@ -61,7 +61,7 @@ const VERIFICATION_COLLECTIONS: VerificationCollection[] = [
 
 export default function DashboardPage() {
   const { primaryWallet, user } = useDynamicContext();
-  const walletConnected = (primaryWallet !== null || user)
+  const walletConnected = Boolean(primaryWallet || user)
   const { address } = useAccount();
   const chainId = useChainId();
   const { switchChain, isPending: isSwitchingChain } = useSwitchChain();
@@ -529,7 +529,7 @@ export default function DashboardPage() {
               )}
               {chainId !== raylsDevnet.id && !isSwitchingChain && (
                 <p className="text-sm mt-1 text-amber-700">
-                  ⚠️ Please ensure you're on Rayls Devnet network (Chain ID: {raylsDevnet.id}). Current: {chainId}
+                  ⚠️ Please ensure you&apos;re on Rayls Devnet network (Chain ID: {raylsDevnet.id}). Current: {chainId}
                 </p>
               )}
             </div>

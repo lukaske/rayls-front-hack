@@ -3,13 +3,18 @@ import createGlobe from "cobe";
 import { useEffect, useRef } from "react";
 
 export function Cobe() {
-  const canvasRef = useRef();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     let width = 0;
     let phi = 0;
-    const onResize = () => canvasRef.current && (width = canvasRef.current.offsetWidth)
-    window.addEventListener('resize', onResize)
-    onResize()
+    const onResize = () => {
+      if (canvasRef.current) {
+        width = canvasRef.current.offsetWidth;
+      }
+    };
+    window.addEventListener('resize', onResize);
+    onResize();
+    if (!canvasRef.current) return;
     const globe = createGlobe(canvasRef.current, {
       devicePixelRatio: 2,
       width: width * 2,
@@ -34,7 +39,11 @@ export function Cobe() {
 
       }
     })
-    setTimeout(() => canvasRef.current.style.opacity = '1')
+    setTimeout(() => {
+      if (canvasRef.current) {
+        canvasRef.current.style.opacity = '1';
+      }
+    })
     return () => { 
       globe.destroy();
       window.removeEventListener('resize', onResize);
@@ -57,5 +66,5 @@ export function Cobe() {
       }}
     />
   </div>
-}<Cobe/>
+}
 
