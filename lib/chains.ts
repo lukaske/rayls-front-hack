@@ -17,4 +17,10 @@ export const raylsDevnet = defineChain({
       http: ["https://devnet-rpc.rayls.com"],
     },
   },
+  blockExplorers: {
+    default: {
+      name: "Rayls Explorer",
+      url: "https://devnet-explorer.rayls.com",
+    },
+  },
 });
