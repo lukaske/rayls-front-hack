@@ -31,7 +31,7 @@ export default function Home() {
                   size="lg"
                   className="text-lg px-10 py-6 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-500/30 transition-all duration-300 font-semibold"
                 >
-                  Launch Tier 1 KYC Dashboard
+                  Get Tier 1 KYC in minutes →
                 </Button>
               </Link>
               <Link href="/demo">
@@ -40,7 +40,7 @@ export default function Home() {
                   variant="outline"
                   className="text-lg px-10 py-6 border-2 border-slate-200 text-slate-800 hover:bg-white hover:border-slate-300 transition-all duration-300 font-semibold"
                 >
-                  Watch the vault demo
+                  Try the vault demo
                 </Button>
               </Link>
             </div>
@@ -160,13 +160,13 @@ export default function Home() {
             <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-10 items-center">
               <div className="space-y-6">
                 <p className="text-xs uppercase tracking-[0.3em] text-blue-500">
-                  Global verification map
+                  Global expansion engine
                 </p>
                 <h3 className="text-3xl font-semibold text-slate-900">
-                  See your network of Tier 1 users light up in real time.
+                  Grow your global user base faster than ever.
                 </h3>
                 <p className="text-slate-600 text-lg">
-                  The interactive Rayls Globe visualizes active credentials, partner vaults, and live verification sessions across continents.
+                  On-board users, win over high-value individuals, and launch globally with a visually rich KYC experience you can rely on.
                 </p>
               </div>
               <div className="rounded-3xl border border-slate-100 bg-slate-50 p-4">

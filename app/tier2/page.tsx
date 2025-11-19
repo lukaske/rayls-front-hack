@@ -4,15 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Navbar } from "@/components/navbar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  ShieldCheck,
-  Landmark,
-  Building2,
-  Building,
-  FileCheck2,
-  Camera,
-  Lock,
-} from "lucide-react";
+import { ShieldCheck, Landmark, Building2, Building, FileCheck2, Camera, Lock, CheckCircle2 } from "lucide-react";
 
 type DocumentType = "id" | "passport";
 
@@ -88,8 +80,10 @@ export default function Tier2DashboardPage() {
   const [requestMessage, setRequestMessage] = useState<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [selfieDataUrl, setSelfieDataUrl] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const countdownRef = useRef<NodeJS.Timeout | null>(null);
 
   const selectedProvider = useMemo(
     () => PROVIDERS.find((provider) => provider.id === selectedProviderId) ?? PROVIDERS[0],
@@ -126,6 +120,11 @@ export default function Tier2DashboardPage() {
   };
 
   const stopCamera = () => {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+    setCountdown(null);
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) {
@@ -134,6 +133,11 @@ export default function Tier2DashboardPage() {
   };
 
   const captureSelfie = () => {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+    setCountdown(null);
     const video = videoRef.current;
     if (!video || !streamRef.current) return;
     const canvas = document.createElement("canvas");
@@ -147,7 +151,47 @@ export default function Tier2DashboardPage() {
     stopCamera();
   };
 
+  const startLivelinessSequence = async () => {
+    if (countdownRef.current) return;
+    setSelfieDataUrl(null);
+    await startCamera();
+    setCountdown(5);
+    countdownRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (!prev || prev <= 1) {
+          if (countdownRef.current) {
+            clearInterval(countdownRef.current);
+            countdownRef.current = null;
+          }
+          captureSelfie();
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
   const handleRequestSubmission = async () => {
+  const startLivelinessSequence = async () => {
+    if (countdownRef.current) return;
+    setSelfieDataUrl(null);
+    await startCamera();
+    setCountdown(3);
+    countdownRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (!prev || prev <= 1) {
+          if (countdownRef.current) {
+            clearInterval(countdownRef.current);
+            countdownRef.current = null;
+          }
+          captureSelfie();
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
     if (!allDocumentsProvided) {
       setRequestMessage("Please upload both required PDFs before sending the request.");
       return;
@@ -275,34 +319,60 @@ export default function Tier2DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-2xl border border-dashed border-slate-200 overflow-hidden bg-slate-50">
-                <video
-                  ref={videoRef}
-                  className="w-full h-64 object-cover bg-slate-900/90"
-                  autoPlay
-                  playsInline
-                  muted
-                />
+              <div
+                className={`rounded-2xl overflow-hidden relative ${
+                  selfieDataUrl ? "border border-slate-200 bg-black/90" : "border border-dashed border-slate-200 bg-slate-50"
+                }`}
+              >
+                {!selfieDataUrl && (
+                  <>
+                    <video
+                      ref={videoRef}
+                      className="w-full h-64 object-cover bg-slate-900/90"
+                      autoPlay
+                      playsInline
+                      muted
+                    />
+                    {countdown !== null && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/40 text-white gap-3 p-6 text-center">
+                        <span className="text-6xl font-semibold">{countdown}</span>
+                        <span className="text-base font-medium tracking-wide">
+                          Rotate your head slowly left ↔ right until the timer ends
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
                 {selfieDataUrl && (
-                  <img src={selfieDataUrl} alt="Captured selfie" className="w-full h-48 object-cover border-t border-slate-200" />
+                  <img src={selfieDataUrl} alt="Captured selfie" className="w-full h-64 object-cover" />
                 )}
               </div>
               <div className="flex flex-wrap gap-3">
-                <Button type="button" onClick={startCamera} variant="secondary">
+                <Button type="button" onClick={startLivelinessSequence} variant="secondary" disabled={!!countdownRef.current}>
                   Start liveliness check
                 </Button>
-                <Button type="button" onClick={captureSelfie} disabled={!streamRef.current}>
-                  Capture selfie
-                </Button>
-                <Button type="button" variant="ghost" onClick={() => { stopCamera(); setSelfieDataUrl(null); }}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    stopCamera();
+                    setSelfieDataUrl(null);
+                  }}
+                >
                   Reset
                 </Button>
               </div>
               {cameraError && <p className="text-sm text-red-600">{cameraError}</p>}
-              {!selfieDataUrl && (
-                <p className="text-xs text-slate-500">
-                  Your camera feed never leaves the browser; only the encrypted still frame is uploaded.
+              {countdown !== null ? (
+                <p className="text-xs text-emerald-600">
+                  Keep rotating your head left and right for the full 5-second timer to confirm liveliness.
                 </p>
+              ) : (
+                !selfieDataUrl && (
+                  <p className="text-xs text-slate-500">
+                    Your camera feed never leaves the browser; only the encrypted still frame is uploaded.
+                  </p>
+                )
               )}
             </CardContent>
           </Card>
@@ -342,11 +412,23 @@ export default function Tier2DashboardPage() {
                   placeholder="Add additional onboarding context for the tenant reviewer..."
                 />
               </div>
+              <div
+                className={`flex items-center gap-2 text-sm ${
+                  selfieDataUrl ? "text-emerald-600" : "text-slate-400"
+                }`}
+              >
+                <CheckCircle2
+                  className={`h-4 w-4 ${selfieDataUrl ? "text-emerald-500" : "text-slate-300"}`}
+                />
+                <span>
+                  {selfieDataUrl ? "Liveliness check passed" : "Finish the liveliness check to mark it complete"}
+                </span>
+              </div>
               <Button
                 size="lg"
                 className="w-full bg-cyan-600 hover:bg-cyan-700 text-white"
                 onClick={handleRequestSubmission}
-                disabled={requestStatus === "submitting"}
+                disabled={requestStatus === "submitting" || !selfieDataUrl}
               >
                 {requestStatus === "submitting" ? "Encrypting payload..." : "Send encrypted KYC package"}
               </Button>
