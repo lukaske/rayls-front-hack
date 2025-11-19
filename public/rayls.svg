@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="rayls-gradient" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ECFB3E"/>
+      <stop offset="1" stop-color="#B49AFF"/>
+    </linearGradient>
+    <linearGradient id="rayls-glow" x1="12" y1="52" x2="52" y2="12" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#B49AFF" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#ECFB3E" stop-opacity="0.3"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#05060F"/>
+  <circle cx="32" cy="32" r="22" fill="url(#rayls-glow)"/>
+  <path
+    d="M20 44V20h13.8c7.85 0 12.8 4.3 12.8 10.75 0 5.09-3.22 8.16-7.7 9.15L43.6 44h-8.15l-6.88-6.33H27.2V44H20Zm7.2-12.56h6c3.21 0 5.17-1.68 5.17-4.16 0-2.7-2.09-4.02-5.22-4.02H27.2v8.18Z"
+    fill="url(#rayls-gradient)"
+    stroke="#05060F"
+    stroke-width="0.6"
+    stroke-linejoin="round"
+  />
+</svg>
+
