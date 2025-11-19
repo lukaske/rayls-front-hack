@@ -1,14 +1,21 @@
 "use client";
 
-import { useAccount, useReadContract, useWriteContract } from "wagmi";
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId, useSwitchChain } from "wagmi";
+import { Address } from "viem";
+import { raylsDevnet } from "@/lib/chains";
 import { NFTCard } from "@/components/nft-card";
 import { Navbar } from "@/components/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { VerificationOverlay } from "@/components/verification-overlay";
-import { NFT_CONTRACT_ADDRESS, NFT_ABI } from "@/lib/contracts";
+import { 
+  NFT_CONTRACT_ADDRESS, 
+  NFT_ABI, 
+  KYC_VERIFIER_CONTRACT_ADDRESS,
+  KYC_VERIFIER_ABI 
+} from "@/lib/contracts";
+import { transformProofToContractFormat, mapProviderToPlatform } from "@/lib/proof-utils";
 import { useState, useEffect } from "react";
-import { parseEther } from "viem";
 import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
 import { useReclaim } from "@/hooks/useReclaim";
 
@@ -56,9 +63,13 @@ export default function DashboardPage() {
   const { primaryWallet, user } = useDynamicContext();
   const walletConnected = (primaryWallet !== null || user)
   const { address } = useAccount();
-  const { writeContract } = useWriteContract();
+  const chainId = useChainId();
+  const { switchChain, isPending: isSwitchingChain } = useSwitchChain();
+  const { writeContract, data: hash, isPending: isWriting } = useWriteContract();
   const [userNFTs, setUserNFTs] = useState<Map<string, string>>(new Map());
   const [verifying, setVerifying] = useState<string | null>(null);
+  const [submittingProof, setSubmittingProof] = useState(false);
+  const [proofError, setProofError] = useState<string | null>(null);
   const { 
     proofs, 
     isLoading: reclaimLoading, 
@@ -68,6 +79,11 @@ export default function DashboardPage() {
     startVerification,
     cancelVerification
   } = useReclaim();
+
+  // Wait for transaction receipt
+  const { isLoading: isConfirming, isSuccess: isTransactionSuccess } = useWaitForTransactionReceipt({
+    hash,
+  });
   const totalCollections = VERIFICATION_COLLECTIONS.length;
   const verifiedCount = userNFTs.size;
   const remainingCount = Math.max(totalCollections - verifiedCount, 0);
@@ -99,75 +115,199 @@ export default function DashboardPage() {
     : "Ready to verify";
 
   // Check NFT ownership for each collection
-  const { data: coinbaseBalance } = useReadContract({
+  const { data: nftBalance, refetch: refetchNFTBalance } = useReadContract({
     address: NFT_CONTRACT_ADDRESS,
     abi: NFT_ABI,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-    query: { enabled: !!address },
+    query: { enabled: !!address && !!walletConnected },
   });
 
+  // Check if user has KYC NFT
+  const { data: hasKYCNFT } = useReadContract({
+    address: NFT_CONTRACT_ADDRESS,
+    abi: NFT_ABI,
+    functionName: "hasKYCNFT",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address && !!walletConnected },
+  });
+
+  // Get token ID by address if user has NFT
+  const { data: tokenId } = useReadContract({
+    address: NFT_CONTRACT_ADDRESS,
+    abi: NFT_ABI,
+    functionName: "getTokenIdByAddress",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address && !!walletConnected && hasKYCNFT === true },
+  });
+
+  // Get KYC data for the token to determine platform
+  interface KYCData {
+    firstName: string;
+    lastName: string;
+    kycStatus: string;
+    platform: string;
+    verifiedAddress: Address;
+    mintedAt: bigint;
+  }
+
+  const { data: kycDataRaw } = useReadContract({
+    address: NFT_CONTRACT_ADDRESS,
+    abi: NFT_ABI,
+    functionName: "getKYCData",
+    args: tokenId ? [tokenId] : undefined,
+    query: { enabled: !!address && !!walletConnected && !!tokenId && tokenId !== null && Number(tokenId) > 0 },
+  });
+  
+  const kycData = kycDataRaw as KYCData | undefined;
+
+  // Fetch user's NFTs when balance changes
   useEffect(() => {
-    // Fetch user's NFTs
-    // This is a simplified version - you'd need to query all token IDs
-    if (address && coinbaseBalance && Number(coinbaseBalance) > 0) {
-      // In a real implementation, you'd fetch all token IDs
+    if (address && hasKYCNFT && tokenId !== null && tokenId !== undefined && Number(tokenId) > 0) {
+      // Determine which collection this belongs to based on platform from KYC data
       setUserNFTs((prev) => {
         const newMap = new Map(prev);
-        newMap.set("coinbase-kyc", "1"); // Mock token ID
+        
+        // If we have KYC data, use the platform to determine the collection
+        if (kycData && typeof kycData === 'object' && 'platform' in kycData && kycData.platform) {
+          const platform = String(kycData.platform).toLowerCase();
+          let collectionId = "";
+          
+          if (platform.includes("coinbase")) {
+            collectionId = "coinbase-kyc";
+          } else if (platform.includes("binance")) {
+            collectionId = "binance-kyc";
+          } else if (platform.includes("x") || platform.includes("twitter")) {
+            collectionId = "x-username";
+          } else {
+            collectionId = "example-verification";
+          }
+          
+          if (collectionId && !newMap.has(collectionId)) {
+            newMap.set(collectionId, tokenId.toString());
+          }
+        } else {
+          // Fallback: if no KYC data yet, we'll update when it's available
+          // For now, don't add it to the map
+        }
+        
         return newMap;
       });
     }
-  }, [address, coinbaseBalance]);
+  }, [address, hasKYCNFT, tokenId, kycData]);
 
-  // Handle proofs when they're received
+  // Handle proofs when they're received - submit to contract
   useEffect(() => {
-    if (proofs && address && verifying) {
-      // Convert proofs to a format suitable for the contract
-      // The exact format depends on your contract's requirements
-      const proofString = JSON.stringify(proofs);
-      
-      // Mint NFT with proof
-      writeContract({
-        address: NFT_CONTRACT_ADDRESS,
-        abi: NFT_ABI,
-        functionName: "mint",
-        args: [address, proofString],
-      });
+    if (proofs && address && verifying && !submittingProof) {
+      const submitProofToContract = async () => {
+        try {
+          setSubmittingProof(true);
+          setProofError(null);
 
-      // Find the collection being verified and mark it as verified
+          // Check if we're on the correct chain (Rayls Devnet)
+          if (chainId !== raylsDevnet.id) {
+            console.log(`Switching chain from ${chainId} to ${raylsDevnet.id}`);
+            try {
+              await switchChain({ chainId: raylsDevnet.id });
+              // Wait a bit for the chain switch to complete
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            } catch (switchError: any) {
+              throw new Error(`Please switch to Rayls Devnet network. ${switchError.message || ''}`);
+            }
+          }
+
+          // Find the collection being verified
+          const collection = VERIFICATION_COLLECTIONS.find(c => c.id === verifying);
+          if (!collection) {
+            throw new Error("Collection not found");
+          }
+
+          // Transform proof to contract format
+          const contractProof = transformProofToContractFormat(proofs);
+          const platform = mapProviderToPlatform(collection.verificationMethod);
+
+          console.log("Submitting proof to contract:", {
+            proof: contractProof,
+            platform,
+            to: address,
+            chainId: raylsDevnet.id,
+          });
+
+          // Call verifyAndMint on the KYCVerifier contract
+          // Explicitly set the chain to ensure we're on Rayls Devnet
+          writeContract({
+            address: KYC_VERIFIER_CONTRACT_ADDRESS,
+            abi: KYC_VERIFIER_ABI,
+            functionName: "verifyAndMint",
+            args: [contractProof, platform, address],
+            chainId: raylsDevnet.id,
+          });
+        } catch (error: any) {
+          console.error("Error submitting proof to contract:", error);
+          setProofError(error.message || "Failed to submit proof to contract");
+          setSubmittingProof(false);
+          setVerifying(null);
+        }
+      };
+
+      submitProofToContract();
+    }
+  }, [proofs, address, verifying, submittingProof, writeContract, chainId, switchChain]);
+
+  // Handle transaction success
+  useEffect(() => {
+    if (isTransactionSuccess && hash && verifying) {
+      // Transaction successful - refetch NFT balance and token ID
+      refetchNFTBalance();
+      
+      // Find the collection being verified
       const collection = VERIFICATION_COLLECTIONS.find(c => c.id === verifying);
       if (collection) {
+        // The NFT should now be minted - we'll update the UI after refetch
+        // For now, we'll mark it as verified (tokenId will be updated by the refetch)
         setUserNFTs((prev) => {
           const newMap = new Map(prev);
-          // Generate a token ID (in production, you'd get this from the mint transaction)
-          newMap.set(collection.id, Date.now().toString());
+          // Use a temporary ID - will be updated when tokenId is fetched
+          newMap.set(collection.id, "pending");
           return newMap;
         });
       }
 
+      setSubmittingProof(false);
       setVerifying(null);
     }
-  }, [proofs, address, verifying, writeContract]);
+  }, [isTransactionSuccess, hash, verifying, refetchNFTBalance]);
 
   // Handle errors
   useEffect(() => {
     if (reclaimError) {
       console.error("Verification error:", reclaimError);
       setVerifying(null);
+      setSubmittingProof(false);
     }
   }, [reclaimError]);
+
+  // Handle proof submission errors
+  useEffect(() => {
+    if (proofError) {
+      console.error("Proof submission error:", proofError);
+    }
+  }, [proofError]);
 
   const handleVerify = async (collection: VerificationCollection) => {
     if (!address) return;
 
     setVerifying(collection.id);
+    setProofError(null);
+    setSubmittingProof(false);
     await startVerification(collection.verificationMethod);
   };
 
   const handleCancelVerification = () => {
     cancelVerification();
     setVerifying(null);
+    setSubmittingProof(false);
+    setProofError(null);
   };
 
   const handleStartNextVerification = () => {
@@ -367,10 +507,38 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          {reclaimError && (
+          {(reclaimError || proofError) && (
             <div className="rounded-2xl border border-red-200 bg-red-50/80 px-6 py-4 text-red-700 shadow-sm">
               <p className="font-semibold">Verification error</p>
-              <p className="text-sm mt-1">{reclaimError}</p>
+              <p className="text-sm mt-1">{reclaimError || proofError}</p>
+            </div>
+          )}
+
+          {(isSwitchingChain || submittingProof || isWriting || isConfirming) && (
+            <div className="rounded-2xl border border-blue-200 bg-blue-50/80 px-6 py-4 text-blue-700 shadow-sm">
+              <p className="font-semibold">
+                {isSwitchingChain && "Switching to Rayls Devnet network..."}
+                {!isSwitchingChain && submittingProof && !isWriting && "Preparing transaction..."}
+                {!isSwitchingChain && isWriting && "Waiting for wallet signature..."}
+                {!isSwitchingChain && isConfirming && "Transaction confirmed! Waiting for block confirmation..."}
+              </p>
+              {hash && (
+                <p className="text-sm mt-1">
+                  Transaction: {hash.slice(0, 10)}...{hash.slice(-8)}
+                </p>
+              )}
+              {chainId !== raylsDevnet.id && !isSwitchingChain && (
+                <p className="text-sm mt-1 text-amber-700">
+                  ⚠️ Please ensure you're on Rayls Devnet network (Chain ID: {raylsDevnet.id}). Current: {chainId}
+                </p>
+              )}
+            </div>
+          )}
+
+          {isTransactionSuccess && (
+            <div className="rounded-2xl border border-green-200 bg-green-50/80 px-6 py-4 text-green-700 shadow-sm">
+              <p className="font-semibold">✓ Verification successful!</p>
+              <p className="text-sm mt-1">Your KYC NFT has been minted. Refreshing your credentials...</p>
             </div>
           )}
 
