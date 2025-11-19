@@ -10,7 +10,7 @@ export function Navbar() {
     <nav className="border-b border-gray-200 bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
       <div className="container mx-auto px-4 py-3 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-3 group">
-          <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-500 text-white flex items-center justify-center shadow-lg shadow-blue-500/40 transition-transform duration-300 group-hover:scale-110">
+          <div className="h-11 w-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center  transition-transform duration-300 group-hover:scale-105">
             <ShieldCheck className="w-6 h-6" strokeWidth={2.2} />
           </div>
           <div className="flex flex-col leading-tight">
@@ -20,6 +20,7 @@ export function Navbar() {
             <span className="text-sm font-medium text-gray-500 font-brand">
               Identity on Rayls
             </span>
+
           </div>
         </Link>
         <div className="flex items-center gap-4">
