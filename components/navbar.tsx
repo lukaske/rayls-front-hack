@@ -14,7 +14,7 @@ export function Navbar() {
         <div className="flex items-center gap-4">
           <Link href="/dashboard">
             <Button variant="ghost" className="text-gray-700 hover:text-gray-900 hover:bg-gray-100">
-              Dashboard
+              Tier 1 KYC Dashboard
             </Button>
           </Link>
           <Link href="/demo">

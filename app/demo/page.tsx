@@ -48,7 +48,7 @@ export default function DemoPage() {
     if (!kycCheck.data) {
       setDepositStatus("failed");
       setErrorMessage(
-        "You need a valid KYC NFT to deposit. Please verify your identity first in the Dashboard."
+        "You need a valid KYC NFT to deposit. Please verify your identity first in the Tier 1 KYC Dashboard."
       );
       return;
     }
@@ -127,7 +127,7 @@ export default function DemoPage() {
             {!hasKYC && (
               <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
                 <p className="text-sm text-yellow-800">
-                  <strong>Demo Flow:</strong> The deposit will fail first. Go to the Dashboard,
+                  <strong>Demo Flow:</strong> The deposit will fail first. Go to the Tier 1 KYC Dashboard,
                   verify your identity using Reclaim Protocol, then return here to successfully deposit.
                 </p>
               </div>
